@@ -1,0 +1,87 @@
+// Motor Driver Pins (L298N)
+#define ENA  5   // Left Motor Speed
+#define IN1  6   // Left Motor Forward
+#define IN2  7   // Left Motor Backward
+#define ENB  10  // Right Motor Speed
+#define IN3  8   // Right Motor Forward
+#define IN4  9   // Right Motor Backward
+
+// Sensor Configuration
+#define NUM_SENSORS 5
+int sensorPins[NUM_SENSORS] = { A0, A1, A2, A3, A4 };
+int s[NUM_SENSORS];
+int base[NUM_SENSORS] = { 1, 2, 4, 8, 16 };
+int threshold = 512, sensor, sum;
+
+// PID Control Variables
+int baseSpeed = 50;  // Adjust for desired speed
+float kp = 40, kd = 20;
+float error, lastError, PID;
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(ENA, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(ENB, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    pinMode(sensorPins[i], INPUT);
+  }
+}
+
+void loop() {
+  readSensors();
+  calculatePID();
+  applyMotorControl();
+}
+
+// Read sensor values and calculate error
+void readSensors() {
+  sensor = 0;
+  sum = 0;
+  int weightedSum = 0;
+
+  for (byte i = 0; i < NUM_SENSORS; i++) {
+    s[i] = analogRead(sensorPins[i]); // Read sensor value
+    s[i] = (s[i] > threshold) ? 0 : 1; // Convert: 0 (Black), 1 (White)
+
+    weightedSum += s[i] * (i + 1);
+    sum += s[i];
+  }
+
+  // If sensors detect black, calculate error; otherwise, maintain last error
+  if (sum > 0) {
+    error = ((float)weightedSum / sum) - ((NUM_SENSORS + 1) / 2);
+  } else {
+    error = lastError;
+  }
+}
+
+// Calculate PID values
+void calculatePID() {
+  float pTerm = kp * error;
+  float dTerm = kd * (error - lastError);
+  PID = pTerm + dTerm;
+  lastError = error;
+}
+
+// Apply motor control based on PID
+void applyMotorControl() {
+  int leftSpeed = baseSpeed - PID;
+  int rightSpeed = baseSpeed + PID;
+
+  leftSpeed = constrain(leftSpeed, 0, 255);
+  rightSpeed = constrain(rightSpeed, 0, 255);
+
+  analogWrite(ENA, leftSpeed);
+  analogWrite(ENB, rightSpeed);
+
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+}
